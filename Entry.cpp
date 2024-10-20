@@ -122,6 +122,15 @@ int main(const int argc, const char **argv, const char **envp) {
                                             }
                                         });
 
+    signatureMatcher->LoadSignaturePack("RBX::Luau::Partials", std::map<std::string, hat::signature>{
+                                            {
+                                                "luaO_nilObject [ref]",
+                                                hat::parse_signature(
+                                                    "48 63 50 ? 8B CA 83 E1 ? 80 F9 05 75 06 4C 39 48 10 74 1F F7 C2 F0 FF FF FF 74 10 48 8B CA 48 C1 F9 ? 48 C1 E1 ? 48 03 C1")
+                                                .value()
+                                            }
+                                        });
+
     signatureMatcher->LoadSignaturePack("RBX::Luau", std::map<std::string, hat::signature>{
                                             {
                                                 "lua_type",
@@ -159,6 +168,9 @@ int main(const int argc, const char **argv, const char **envp) {
 
     auto FoundSignatures = signatureMatcher->RunMatcher("RobloxPlayerBeta.exe", hRobloxModule);
 
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [2/2] Analysis...");
+
     state.FunctionMap = FoundSignatures;
 
     auto VMShuffleDumps = std::vector<std::shared_ptr<RobloxDumper::AnalysisTasks::TaskBase<
@@ -172,12 +184,48 @@ int main(const int argc, const char **argv, const char **envp) {
         VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle7And8>());
     }
 
-    std::println("- VMShuffles: ");
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [2/2] Processing VMShuffles...");
+
     for (const auto &vmShuffle: VMShuffleDumps) {
         for (auto shuffles = vmShuffle->Analyse(state); const auto &shuffle: shuffles->ToCMacros()) {
             std::println("{}", shuffle);
         }
     }
+
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [2/2] Processed VMShuffles...");
+
+    while (true) {
+        if (!FoundSignatures.contains("luaO_nilObject [ref]")) {
+            break;
+        }
+        auto partialRef = FoundSignatures.at("luaO_nilObject [ref]");
+
+        auto possibleInsns = rbxStuDisassembler->GetInstructions(
+            partialRef, reinterpret_cast<void *>(reinterpret_cast<std::uintptr_t>(partialRef) + 0x4C), true);
+
+        if (!possibleInsns.has_value())
+            break;
+
+        auto disassembledChunk = std::move(possibleInsns.value());
+        auto insn = disassembledChunk->GetInstructionWhichMatches("lea", "rax, [rip +", true);
+
+        if (!insn.has_value())
+            break;
+
+        FoundSignatures["luaO_nilObject"] = const_cast<void *>(rbxStuDisassembler->
+            TranslateRelativeLeaIntoRuntimeAddress(insn.value()).
+            value());
+
+        RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                        std::format("Step [2/2] luaO_nilObject @ RobloxPlayerBeta.exe+{}", reinterpret_cast<
+                            void *>(reinterpret_cast<std::uintptr_t>(FoundSignatures["luaO_nilObject"]) - hRobloxModule.
+                                address())));
+
+        break;
+    }
+
 
     return 0;
 
