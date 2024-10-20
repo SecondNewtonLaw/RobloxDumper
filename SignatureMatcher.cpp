@@ -21,7 +21,7 @@ namespace RobloxDumper {
 
     void SignatureMatcher::LoadSignaturePack(const std::string &packName,
                                              const std::map<std::string, hat::signature> &signaturePack) {
-        if (!this->m_signaturePacks.contains(packName)) {
+        if (this->m_signaturePacks.contains(packName)) {
             RobloxDumperLog(RobloxDumper::LogType::Warning, RobloxDumper::SigMatcher,
                             std::format(
                                 "The provided signature pack {} has already been loaded into memory, ignoring call.",
@@ -44,12 +44,18 @@ namespace RobloxDumper {
             RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::SigMatcher,
                             std::format("Matching signature pack {}...", packName));
 
-            auto scanResults = Utilities::ScanMany(signaturePack, true);
+            auto scanResults = Utilities::ScanMany(hModule, signaturePack, true);
 
             for (auto it = scanResults.begin(); it != scanResults.end(); ++it) {
+                if (!it->second.has_result()) {
+                    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::SigMatcher,
+                                    std::format("- Could not find signature for {} in {}", it->first, moduleName));
+                    continue;
+                }
                 RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::SigMatcher,
-                                std::format("- Found signature {} in {}+{}", it->first, moduleName, (hModule.address() -
-                                    reinterpret_cast<std::uintptr_t>(it->second.get()))));
+                        std::format("- Found signature {} in {}+{}", it->first, moduleName, reinterpret_cast<
+                                        void *>(reinterpret_cast<std::uintptr_t>(it->second.get()) - hModule.
+                                                address())));
                 results[it->first] = it->second.get();
             }
         }

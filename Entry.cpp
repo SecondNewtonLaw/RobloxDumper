@@ -20,6 +20,8 @@
 #include "Analysis/Disassembler.hpp"
 #include "Analysis/StringSearcher.hpp"
 #include "Analysis/XrefSearcher.hpp"
+#include "AnalysisTasks/VMShuffles/VMShuffle3And5.hpp"
+#include "AnalysisTasks/VMShuffles/VmShuffle7.hpp"
 
 static __inline std::map<std::string_view, hat::signature> AOBSignatures{
     {
@@ -86,8 +88,9 @@ int main(const int argc, const char **argv, const char **envp) {
     auto stringSearcher = RobloxDumper::Analysis::StringSearcher::GetSingleton();
     auto xrefSearcher = RobloxDumper::Analysis::XrefSearcher::GetSingleton();
     auto signatureMatcher = RobloxDumper::SignatureMatcher::GetSingleton();
-
     auto hRobloxModule = hat::process::get_module("RobloxPlayerBeta.exe").value();
+
+    xrefSearcher->BootstrapXrefsForModule(hRobloxModule);
 
     RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
                     "Analysis tools ready. Step 1/2 Signature Scanning");
@@ -151,6 +154,33 @@ int main(const int argc, const char **argv, const char **envp) {
                                         });
 
     auto rbxStuDisassembler = RobloxDumper::Analysis::Disassembler::GetSingleton();
+
+    RobloxDumper::DumperState state{};
+
+    auto FoundSignatures = signatureMatcher->RunMatcher("RobloxPlayerBeta.exe", hRobloxModule);
+
+    state.FunctionMap = FoundSignatures;
+
+    auto VMShuffleDumps = std::vector<std::shared_ptr<RobloxDumper::AnalysisTasks::TaskBase<
+        RobloxDumper::AnalysisTasks::VmShuffles::VMShuffleResult> > >{};
+
+    if (FoundSignatures.contains("lua_type")) {
+        VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle3And5>());
+    }
+
+    if (FoundSignatures.contains("luaG_aritherror")) {
+        VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle7>());
+    }
+
+    for (const auto &vmShuffle: VMShuffleDumps) {
+        std::println("Processing...");
+
+        for (auto shuffles = vmShuffle->Analyse(state); const auto &shuffle: shuffles->ToCMacros()) {
+            std::println("{}", shuffle);
+        }
+    }
+
+    return 0;
 
     auto foundSignatures = std::map<std::string_view, void *>();
 
@@ -220,172 +250,6 @@ int main(const int argc, const char **argv, const char **envp) {
                          reinterpret_cast<void *>(offset - hRobloxModule.
                                                   address()));
         }
-    }
-
-    while (true) {
-        if (!foundSignatures.contains("lua_type")) {
-            std::println("Cannot dump VMShuffle 3 and 5; Missing lua_type!");
-            break;
-        }
-        std::println("Attempting to dump VMShuffle 3 and 5");
-
-        auto possibleInstructions = rbxStuDisassembler->GetInstructions(foundSignatures["lua_type"],
-                                                                        reinterpret_cast<void *>(
-                                                                            reinterpret_cast<std::uintptr_t>(
-                                                                                foundSignatures
-                                                                                ["lua_type"]) + 0x1D),
-                                                                        true);
-
-        if (!possibleInstructions.has_value()) {
-            std::println("Cannot dump VMShuffle 3 and 5!");
-            break;
-        }
-        auto instructions = std::move(possibleInstructions.value());
-
-        auto loadTableAddress = instructions->GetInstructionWhichMatches("lea", "rcx, [rip +", true);
-
-        if (!loadTableAddress.has_value()) {
-            std::println("Cannot dump VMShuffle 3 and 5! Failed to match.");
-            break;
-        }
-        const auto loadTableInstruction = loadTableAddress.value();
-        const auto possibleTypeTable = rbxStuDisassembler->TranslateRelativeLeaIntoRuntimeAddress(
-            loadTableInstruction);
-
-        if (!possibleTypeTable.has_value()) {
-            std::println("Cannot dump VMShuffle 3 and 5! Failed to obtain type table.");
-            break;
-        }
-
-        const auto typeTable = (const char **) static_cast<const char *>(possibleTypeTable.value());
-
-        /*
-         *  To dump VMShuffle 3 and 5 we must use lua_type, and read the luaT_typenames table.
-         *  This allows us to, well, get whatever the fuck we are after. But this requires us to separate the typenames into sections.
-         *
-         *  Section 0
-         *      - nil
-         *      - boolean
-         *  Section 1 (VMShuffle 3)
-         *      - userdata
-         *      - number
-         *      - vector
-         *  Section 2
-         *      - string
-         *  Section 3 (VMShuffle 5)
-         *      - table
-         *      - function
-         *      - userdata
-         *      - thread
-         *      - buffer
-         */
-        auto tableOrder = std::vector<const char *>{
-            typeTable[0], // nil
-            typeTable[1], // boolean
-
-            typeTable[2], // shuffled (should be userdata) a2 a1
-            typeTable[3], // shuffled (should be number) a3 a2
-            typeTable[4], // shuffled (should be vector) a1 a3
-
-            typeTable[5], // string
-
-            typeTable[6], // shuffled (should be table)
-            typeTable[7], // shuffled (should be function)
-            typeTable[8], // shuffled (should be userdata)
-            typeTable[9], // shuffled (should be thread)
-            typeTable[10] // shuffled (should be buffer)
-        };
-
-        auto vmShuffle3 = std::map<std::string_view, std::string>{
-            {"userdata", "a1"}, {"number", "a2"}, {"vector", "a3"}
-        };
-
-        auto vmShuffle5 = std::map<std::string_view, std::string>{
-            {"table", "a1"}, {"function", "a2"}, {"userdata", "a3"}, {"thread", "a4"}, {"buffer", "a5"}
-        };
-
-        std::println(R"(
-#define VMShuffle3(sep, a1, a2, a3) {} sep {} sep {} sep
-#define VMShuffle5(sep, a1, a2, a3, a4, a5) {} sep {} sep {} sep {} sep {} sep
-)",
-                     // VMValue3
-                     vmShuffle3[tableOrder[2]], vmShuffle3[tableOrder[3]], vmShuffle3[tableOrder[4]],
-
-                     // VMValue5
-                     vmShuffle5[tableOrder[6]], vmShuffle5[tableOrder[7]], vmShuffle5[tableOrder[8]],
-                     vmShuffle5[tableOrder[9]], vmShuffle5[tableOrder[10]]
-        );
-
-        std::println("VMShuffle 3 and 5 cracked successfully!");
-        break;
-    }
-
-    while (true) {
-        if (!foundSignatures.contains("luaG_aritherror")) {
-            std::println("Cannot dump VMShuffle 7; Missing luaG_aritherror!");
-            break;
-        }
-        std::println("Attempting to dump VMShuffle 7...");
-
-        auto possibleInstructions = rbxStuDisassembler->GetInstructions(foundSignatures["luaG_aritherror"],
-                                                                        reinterpret_cast<void *>(
-                                                                            reinterpret_cast<std::uintptr_t>(
-                                                                                foundSignatures
-                                                                                ["luaG_aritherror"]) + 0x4C),
-                                                                        true);
-
-        if (!possibleInstructions.has_value()) {
-            std::println("Cannot dump VMShuffle 7; cannot disassemble");
-            break;
-        }
-
-        const auto disassembledChunk = std::move(possibleInstructions.value());
-
-        const auto targetInsn = disassembledChunk->GetInstructionWhichMatches("lea", "r8, [rip +", true);
-
-        if (!targetInsn.has_value()) {
-            std::println("Cannot dump VMShuffle 7; missing target LEA instruction into r8 from relative offset.");
-            break;
-        }
-
-        const auto leaEventNmesTable = targetInsn.value();
-
-        const auto eventNames = rbxStuDisassembler->TranslateRelativeLeaIntoRuntimeAddress(leaEventNmesTable);
-
-        if (!eventNames.has_value()) {
-            std::println("Cannot dump VMShuffle 7; failed to resolve relative lea.");
-            break;
-        }
-
-        /*
-            "__index",
-            "__newindex",
-            "__mode",
-            "__namecall",
-            "__call",
-            "__iter",
-            "__len",
-         */
-        std::map<std::string_view, std::string> vmShuffle7{};
-        // __eq guarantees order due to an optimization called fasttm, lmao, thank u luau devs, whom on their path to speed, forgor about roblox security, oh yes!!!
-        for (int i = 0; i < 8; i++) {
-            vmShuffle7[((const char **) eventNames.value())[i]] = std::format("a{}", i + 1);
-        }
-
-        std::println(R"(
-#define VMShuffle7(sep, a1, a2, a3, a4, a5, a6, a7) {} sep {} sep {} sep {} sep {} sep {} sep {} sep
-)",
-                     vmShuffle7["__index"],
-                     vmShuffle7["__newindex"],
-                     vmShuffle7["__mode"],
-                     vmShuffle7["__namecall"],
-                     vmShuffle7["__call"],
-                     vmShuffle7["__iter"],
-                     vmShuffle7["__len"]
-        );
-
-        std::println("VMShuffle 7 cracked successfully!");
-        break;
     }
 
     while (true) {
