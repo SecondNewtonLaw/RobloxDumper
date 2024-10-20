@@ -167,11 +167,71 @@ int main(const int argc, const char **argv, const char **envp) {
     RobloxDumper::DumperState state{};
 
     auto FoundSignatures = signatureMatcher->RunMatcher("RobloxPlayerBeta.exe", hRobloxModule);
+    state.FunctionMap = FoundSignatures;
+
+    while (true) {
+        RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                        "Step [2/2] FastFlag Analysis...");
+        const auto data = hRobloxModule.get_section_data(".text");
+        auto patterns = hat::find_all_pattern(data.begin(), data.end(),
+                                              static_cast<hat::signature_view>(hat::compile_signature<
+                                                  "48 83 EC ? 48 8B 0D ? ? ? ? 4C 8D 05 ? ? ? ? 41 B9 ? ? ? ? 48 8D 15 ? ? ? ?">()));
+
+
+        for (const auto &scanned: patterns) {
+            const auto result = scanned.get();
+            auto possibleInsns = rbxStuDisassembler->GetInstructions(
+                result, reinterpret_cast<void *>(reinterpret_cast<std::uintptr_t>(result) + 0x29), true);
+
+            if (!possibleInsns.has_value())
+                continue;
+
+
+            const auto insns = std::move(possibleInsns.value());
+
+            const auto possibleLoadDataReference = insns->GetInstructionWhichMatches("lea", "r8, [rip + ", true);
+            const auto possibleLoadFlagName = insns->GetInstructionWhichMatches("lea", "rdx, [rip + ", true);
+            if (!possibleLoadDataReference.has_value() || !possibleLoadFlagName.has_value()) {
+                RobloxDumperLog(RobloxDumper::LogType::Warning, RobloxDumper::MainThread,
+                                "Cannot find the required assembly without them being "
+                                "coupled! Function analysis may not continue."
+                );
+                continue;
+            }
+            const auto loadNameInsn = possibleLoadFlagName.value();
+            const auto loadDataInsn = possibleLoadDataReference.value();
+
+            const auto flagNameReference = rbxStuDisassembler->TranslateRelativeLeaIntoRuntimeAddress(loadNameInsn);
+            const auto dataReference = rbxStuDisassembler->TranslateRelativeLeaIntoRuntimeAddress(loadDataInsn);
+
+            if (!dataReference.has_value() || !flagNameReference.has_value()) {
+                RobloxDumperLog(RobloxDumper::LogType::Warning, RobloxDumper::MainThread,
+                                "Failed to translate the RIP-based offset into a memory address for any of the "
+                                "LEA operations! This will result on bad things, thus, we cannot continue trying "
+                                "to get this flag :("
+                );
+                continue;
+            }
+
+            state.FastFlagMap[static_cast<const char *>(flagNameReference.value())] = const_cast<void *>(dataReference.
+                value());
+        }
+
+        if (state.FastFlagMap.contains("TaskSchedulerTargetFps")) {
+            auto targetFps = state.FastFlagMap.at("TaskSchedulerTargetFps");
+            RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                            std::format( "- Found TaskSchedulerTargetFps @ RobloxPlayerBeta.exe+{}", reinterpret_cast<
+                                void *>(reinterpret_cast<std::uintptr_t>(targetFps) - hRobloxModule.
+                                    address())));
+        }
+
+        break;
+    }
+
 
     RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
                     "Step [2/2] Analysis...");
 
-    state.FunctionMap = FoundSignatures;
 
     auto VMShuffleDumps = std::vector<std::shared_ptr<RobloxDumper::AnalysisTasks::TaskBase<
         RobloxDumper::AnalysisTasks::VmShuffles::VMShuffleResult> > >{};
