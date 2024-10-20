@@ -1,0 +1,143 @@
+cmake_minimum_required(VERSION 3.8)
+project(RobloxDumper)
+
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+
+add_definitions(-DLUAI_GCMETRICS)   # Force GC metrics on Luau.
+
+option(CAPSTONE_X86_SUPPORT "Enable x86 capstone" ON)
+
+set(BUILD_SHARED_LIBS OFF)
+set(CMAKE_CXX_STANDARD 23)
+
+string(TOLOWER ${CMAKE_BUILD_TYPE} build_type)
+
+if (build_type STREQUAL release)
+    message("Build is in Release Mode; Adding custom Compiler options and Linker options.")
+    add_compile_options(
+            /GA
+            /bigobj
+            /O2
+            /Gr
+            /GS
+            /cgthreads8
+            /arch:AVX2
+    )
+
+    add_link_options(
+            /LTCG
+            /INCREMENTAL
+            /DEBUG
+            /DYNAMICBASE
+            /HIGHENTROPYVA
+            /GUARD:CF
+            /PDB:RobloxDumper.pdb
+            /VERBOSE
+    )
+endif ()
+
+add_executable(${PROJECT_NAME}
+        Entry.cpp
+        Logger.cpp
+        Logger.hpp
+        Utilities.cpp
+        Utilities.hpp
+
+        # RobloxDumper Settings for DLL building.
+        Settings.hpp
+
+        # RobloxDumper/Events
+        Events/Connection.hpp
+        Events/Event.hpp
+
+        # RobloxDumper/Analysis
+        Analysis/Disassembler.cpp
+        Analysis/Disassembler.hpp
+        Analysis/RTTI.cpp
+        Analysis/RTTI.hpp
+        Analysis/StringSearcher.cpp
+        Analysis/StringSearcher.hpp
+        Analysis/XrefSearcher.cpp
+        Analysis/XrefSearcher.hpp
+        SignatureMatcher.cpp
+        SignatureMatcher.hpp
+)
+
+target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Dependencies")
+# Dependencies
+
+
+# Curl For People
+# FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git
+#         GIT_TAG 3b15fa82ea74739b574d705fea44959b58142eb8)
+# FetchContent_MakeAvailable(cpr)
+
+#rcmp
+# FetchContent_Declare(rcmp GIT_REPOSITORY https://github.com/Smertig/rcmp.git
+#         GIT_TAG f5f75ae00a57c67fe41f79fd59c4b7f6997b999e)
+# FetchContent_MakeAvailable(rcmp)
+
+# libhat
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/libhat")
+
+# cpr
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/cpr")
+
+# Luau
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/Luau")
+
+# minhook
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/Minhook")
+
+# IXWebSocket
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/IXWebSocket")
+
+# cryptopp
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/cryptopp-cmake")
+
+# capstone
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/Capstone")
+
+# oxorany
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/oxorany")
+
+find_package(lz4 CONFIG REQUIRED)
+find_package(OpenSSL CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+
+target_link_libraries(${PROJECT_NAME}
+        PUBLIC
+        # libhat -- https://github.com/BasedInc/libhat
+        libhat
+
+        # minhook
+        minhook
+        # Curl For People
+        cpr::cpr
+
+        # Luau
+        Luau.Compiler
+        Luau.Ast
+        Luau.Analysis
+        Luau.VM
+        Luau.VM.Internals
+        Luau.EqSat
+        Luau.CodeGen
+
+
+        ixwebsocket
+
+        lz4::lz4
+
+        cryptopp::cryptopp
+
+        capstone
+
+        nlohmann_json::nlohmann_json
+
+        Dbghelp.lib
+
+        oxorany
+)
+
