@@ -21,7 +21,7 @@
 #include "Analysis/StringSearcher.hpp"
 #include "Analysis/XrefSearcher.hpp"
 #include "AnalysisTasks/VMShuffles/VMShuffle3And5.hpp"
-#include "AnalysisTasks/VMShuffles/VmShuffle7.hpp"
+#include "AnalysisTasks/VMShuffles/VMShuffle7And8.hpp"
 
 static __inline std::map<std::string_view, hat::signature> AOBSignatures{
     {
@@ -169,12 +169,11 @@ int main(const int argc, const char **argv, const char **envp) {
     }
 
     if (FoundSignatures.contains("luaG_aritherror")) {
-        VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle7>());
+        VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle7And8>());
     }
 
+    std::println("- VMShuffles: ");
     for (const auto &vmShuffle: VMShuffleDumps) {
-        std::println("Processing...");
-
         for (auto shuffles = vmShuffle->Analyse(state); const auto &shuffle: shuffles->ToCMacros()) {
             std::println("{}", shuffle);
         }
