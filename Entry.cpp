@@ -390,14 +390,14 @@ int main(const int argc, const char **argv, const char **envp) {
             VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle3And5>());
         }
 
-        if (state.FunctionMap.contains("luaG_aritherror")) {
-            VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle7And8>());
-        }
-
         if (state.FunctionMap.contains("RBX::ScriptContext::checkRequirePermission") && state.FunctionMap.
             contains("luaC_step") && state.XrefMap.contains("Color3.fromHex") && state.FunctionMap.contains(
                 "RBX::ScriptContext::resumeWaitingThreads (Fragment)")) {
             VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle6>());
+        }
+
+        if (state.FunctionMap.contains("luaG_aritherror")) {
+            VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle7And8>());
         }
 
         break;
