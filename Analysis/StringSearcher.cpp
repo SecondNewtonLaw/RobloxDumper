@@ -19,9 +19,7 @@ std::shared_ptr<RobloxDumper::Analysis::StringSearcher> RobloxDumper::Analysis::
     return RobloxDumper::Analysis::StringSearcher::pInstance;
 }
 
-std::optional<void *> RobloxDumper::Analysis::StringSearcher::GetStringAddressInTarget(
-    const hat::process::module hModule,
-    const std::string_view szTargetString) {
+hat::signature RobloxDumper::Analysis::StringSearcher::ToAOB(const std::string_view szTargetString) {
     std::stringstream stream{};
 
     auto str = szTargetString.data();
@@ -38,8 +36,13 @@ std::optional<void *> RobloxDumper::Analysis::StringSearcher::GetStringAddressIn
 
     auto signature = hat::parse_signature(AOB).value();
 
-    const auto pattern = hat::find_pattern(signature, ".rdata", hModule);
+    return signature;
+}
 
+std::optional<void *> RobloxDumper::Analysis::StringSearcher::GetStringAddressInTarget(
+    const hat::process::module hModule,
+    const std::string_view szTargetString) {
+    const auto pattern = hat::find_pattern(this->ToAOB(szTargetString), ".rdata", hModule);
     return pattern.has_result() ? pattern.get() : nullptr;
 }
 

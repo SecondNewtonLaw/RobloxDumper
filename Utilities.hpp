@@ -140,14 +140,14 @@ namespace RobloxDumper {
         static std::map<T, hat::scan_result> ScanMany(
             hat::process::module hModule,
             std::map<T, hat::signature> signatures,
-            const bool parallelScan) {
+            const bool parallelScan, const char *targetSection) {
             std::vector<std::future<std::pair<T, hat::scan_result> > > futures{};
 
             for (const auto sig: signatures) {
                 futures.emplace_back(std::async(parallelScan ? std::launch::async : std::launch::deferred,
-                                                [sig, hModule]() {
+                                                [sig, hModule, targetSection]() {
                                                     return std::make_pair(
-                                                        sig.first, hat::find_pattern(sig.second, ".text", hModule));
+                                                        sig.first, hat::find_pattern(sig.second, targetSection, hModule));
                                                 }));
             }
 

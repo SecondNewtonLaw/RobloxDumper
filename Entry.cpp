@@ -16,12 +16,15 @@
 
 #include "Logger.hpp"
 #include "SignatureMatcher.hpp"
+#include "StringMatcher.hpp"
 
 #include "Analysis/Disassembler.hpp"
 #include "Analysis/StringSearcher.hpp"
 #include "Analysis/XrefSearcher.hpp"
 #include "AnalysisTasks/VMShuffles/VMShuffle3And5.hpp"
+#include "AnalysisTasks/VMShuffles/VmShuffle6.hpp"
 #include "AnalysisTasks/VMShuffles/VMShuffle7And8.hpp"
+#include "AnalysisTasks/VMValues/GlobalState.hpp"
 
 static __inline std::map<std::string_view, hat::signature> AOBSignatures{
     {
@@ -85,6 +88,7 @@ int main(const int argc, const char **argv, const char **envp) {
     LoadLibraryA(filename.c_str());
     RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread, "Bootstrapping analysis tools...");
 
+    auto stringMatcher = RobloxDumper::StringMatcher::GetSingleton();
     auto stringSearcher = RobloxDumper::Analysis::StringSearcher::GetSingleton();
     auto xrefSearcher = RobloxDumper::Analysis::XrefSearcher::GetSingleton();
     auto signatureMatcher = RobloxDumper::SignatureMatcher::GetSingleton();
@@ -93,7 +97,7 @@ int main(const int argc, const char **argv, const char **envp) {
     xrefSearcher->BootstrapXrefsForModule(hRobloxModule);
 
     RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
-                    "Analysis tools ready. Step 1/2 Signature Scanning");
+                    "Analysis tools ready. Step 1/2 Signature & String Scanning");
 
     RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
                     std::format("Target In-Memory Address: {}", reinterpret_cast<void *>(hRobloxModule.address())));
@@ -119,6 +123,18 @@ int main(const int argc, const char **argv, const char **envp) {
                                                 hat::parse_signature(
                                                     "48 89 5C 24 ? 57 48 83 EC 20 48 8B FA 48 8B D9 E8 ? ? ? ? 84 C0 74 ? 48 8B D7 48 8B CB 48 8B 5C 24")
                                                 .value()
+                                            },
+                                            {
+                                                "RBX::Instance::getTopAncestor",
+                                                hat::parse_signature(
+                                                    "48 8B 41 ? 48 85 C0 74 08 48 8B C8 E9 EF FF FF FF 48 8B C1 C3").
+                                                value()
+                                            },
+                                            {
+                                                "RBX::ScriptContext::checkRequirePermission",
+                                                hat::parse_signature(
+                                                    "48 89 5C 24 ? 48 89 6C 24 ? 48 89 54 24 ? 56 57 41 56 48 83 EC ? 4C 8B F2 4C 8B C9 48 8B 32 48 8B CE E8 ? ? ? ? 48 8B F8 4C 8B D8 49 81 E3 ? ? ? ?")
+                                                .value()
                                             }
                                         });
 
@@ -128,6 +144,12 @@ int main(const int argc, const char **argv, const char **envp) {
                                                 hat::parse_signature(
                                                     "48 63 50 ? 8B CA 83 E1 ? 80 F9 05 75 06 4C 39 48 10 74 1F F7 C2 F0 FF FF FF 74 10 48 8B CA 48 C1 F9 ? 48 C1 E1 ? 48 03 C1")
                                                 .value()
+                                            },
+                                            {
+                                                "luaC_checkgc",
+                                                hat::parse_signature(
+                                                    "4D 33 17 48 8B D9 49 8B 42 ? 49 39 42 ? 72 07 B2 ? E8 ? ? ? ?").
+                                                value()
                                             }
                                         });
 
@@ -160,14 +182,133 @@ int main(const int argc, const char **argv, const char **envp) {
                                                     "E8 ? ? ? ? 48 85 C0 74 36 48 89 44 24 ? 48 8B C8 E8 ? ? ? ? 90 48 89 05 ? ? ? ?")
                                                 .value()
                                             },
+                                            {
+                                                "RBX::ScriptContext::resumeWaitingThreads (Fragment)",
+                                                hat::parse_signature(
+                                                    "0F 84 EE 00 00 ? 48 8B 48 ? 48 85 C9 0F 84 E1 00 00 ? 48 8B 41 ? 48 39 41 ? 75 14 48 8B 41 ? 48 39 41 ? 75 0A 80 79 ? 00 0F 84 C3 00 00 ? BA ? ? ? ? E8 ? ? ? ?")
+                                                .value()
+                                            }
                                         });
+
+
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [1/2] -- Loading String Packs...");
+
+    stringMatcher->LoadStringPack("RBX::Luau::StringPartials", {
+                                      {
+                                          "task.desynchronize",
+                                          "task.desynchronize() may only be called from a script that is a descendant of an Actor"
+                                      },
+                                      {
+                                          "luaV_gettable",
+                                          "\'__index\' chain too long; possible loop"
+                                      },
+                                      {
+                                          "luaV_settable",
+                                          "\'__newindex\' chain too long; possible loop"
+                                      }
+                                  });
+
+    stringMatcher->LoadStringPack("RBX::StringPartials", {
+                                      {
+                                          "RBX::ScriptContext::runScript",
+                                          "[FLog::ScriptContext] Running script %p"
+                                      },
+                                      {
+                                          "RBX::ScriptContext::task_defer",
+                                          "Maximum re-entrancy depth (%i) exceeded calling task.defer"
+                                      },
+                                      {
+                                          "RBX::ScriptContext::resume",
+                                          "[FLog::ScriptContext] Resuming script: %p"
+                                      },
+                                      {
+                                          "RBX::ScriptContext::require",
+                                          "Cannot require a RobloxScript module from a non RobloxScript context"
+                                      },
+                                      {
+                                          "RBX::Security::threadAccessError",
+                                          "Gur pheerag guernq pnaabg %f '%f' (ynpxvat pncnovyvgl %f)"
+                                          // Caesar Cyphered in ROBLOX Client, different on ROBLOX Studio.
+                                      },
+                                      {
+                                          "RBX::ScriptContextFacets::WaitingHybridScriptsJob::step",
+                                          "[FLog::DataModelJobs] Waiting scripts start, data model: %p",
+                                      },
+                                      {
+                                          "RBX::ScriptContextFacets::GCJob::step",
+                                          "[FLog::DataModelJobs] GC Job start, data model: %p"
+                                      },
+                                      {
+                                          "RBX::HeartbeatTask::step",
+                                          "[FLog::DataModelJobs] Heartbeat start, data model: %p"
+                                      },
+                                      {
+                                          "Color3.fromHex",
+                                          "Color3.fromHex requires one argument"
+                                      }
+                                  });
 
     auto rbxStuDisassembler = RobloxDumper::Analysis::Disassembler::GetSingleton();
 
     RobloxDumper::DumperState state{};
 
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [1/2] -- Running SignatureMatcher...");
     auto FoundSignatures = signatureMatcher->RunMatcher("RobloxPlayerBeta.exe", hRobloxModule);
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [1/2] -- Running StringMatcher...");
+    auto FoundFunctions = stringMatcher->RunMatcher("RobloxPlayerBeta.exe", hRobloxModule);
+
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [1/2] -- Saved result to current RobloxDumper::DumperState.");
+    state.XrefMap = FoundFunctions;
     state.FunctionMap = FoundSignatures;
+
+    while (true) {
+        RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                        "Step [2/2] Obtaining additional functions through complex scanning...");
+
+        if (state.FunctionMap.contains("luaC_checkgc")) {
+            auto luaC_checkGcExpanded = state.FunctionMap.at("luaC_checkgc");
+
+            auto insns = rbxStuDisassembler->GetInstructions(luaC_checkGcExpanded,
+                                                             reinterpret_cast<void *>(
+                                                                 reinterpret_cast<std::uintptr_t>(luaC_checkGcExpanded)
+                                                                 + 0x1A),
+                                                             true);
+
+            if (!insns.has_value()) {
+                break;
+            }
+
+            auto instructions = std::move(insns.value());
+
+            auto callIntoCStep = instructions->GetInstructionWhichMatches("call", nullptr, true);
+
+            if (!callIntoCStep.has_value())
+                break;
+
+
+            state.FunctionMap["luaC_step"] = reinterpret_cast<void *>(
+                callIntoCStep.value().detail->x86.operands[
+                    0].
+                imm);
+
+            RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                            std::format(
+                                "Step [2/2] Determined address of luaC_step via function analysis. luaC_step: RobloxPlayerBeta.exe+{}"
+                                ,reinterpret_cast<void*>(callIntoCStep.value().detail->x86.operands[0].imm -
+                                    hRobloxModule.
+                                    address())));
+        } else {
+            RobloxDumperLog(RobloxDumper::LogType::Warning, RobloxDumper::MainThread,
+                            "Step [2/2] Cannot resolve luaC_step, missing luaC_checkgc");
+        }
+
+
+        break;
+    }
 
     while (true) {
         RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
@@ -232,29 +373,35 @@ int main(const int argc, const char **argv, const char **envp) {
     RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
                     "Step [2/2] Analysis...");
 
+    auto VMValueDumps = std::vector<std::shared_ptr<RobloxDumper::AnalysisTasks::TaskBase<
+        RobloxDumper::AnalysisTasks::VmValues::VMValueResult> > >{};
+    while (true) {
+        if (state.FunctionMap.contains("luaC_step")) {
+            VMValueDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmValues::GlobalState>());
+        }
+
+        break;
+    }
 
     auto VMShuffleDumps = std::vector<std::shared_ptr<RobloxDumper::AnalysisTasks::TaskBase<
         RobloxDumper::AnalysisTasks::VmShuffles::VMShuffleResult> > >{};
-
-    if (FoundSignatures.contains("lua_type")) {
-        VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle3And5>());
-    }
-
-    if (FoundSignatures.contains("luaG_aritherror")) {
-        VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle7And8>());
-    }
-
-    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
-                    "Step [2/2] Processing VMShuffles...");
-
-    for (const auto &vmShuffle: VMShuffleDumps) {
-        for (auto shuffles = vmShuffle->Analyse(state); const auto &shuffle: shuffles->ToCMacros()) {
-            std::println("{}", shuffle);
+    while (true) {
+        if (state.FunctionMap.contains("lua_type")) {
+            VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle3And5>());
         }
-    }
 
-    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
-                    "Step [2/2] Processed VMShuffles...");
+        if (state.FunctionMap.contains("luaG_aritherror")) {
+            VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle7And8>());
+        }
+
+        if (state.FunctionMap.contains("RBX::ScriptContext::checkRequirePermission") && state.FunctionMap.
+            contains("luaC_step") && state.XrefMap.contains("Color3.fromHex") && state.FunctionMap.contains(
+                "RBX::ScriptContext::resumeWaitingThreads (Fragment)")) {
+            VMShuffleDumps.emplace_back(std::make_shared<RobloxDumper::AnalysisTasks::VmShuffles::VMShuffle6>());
+        }
+
+        break;
+    }
 
     while (true) {
         if (!FoundSignatures.contains("luaO_nilObject [ref]")) {
@@ -286,6 +433,32 @@ int main(const int argc, const char **argv, const char **envp) {
         break;
     }
 
+
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [2/2] Processing VMShuffles...");
+
+    for (const auto &vmShuffle: VMShuffleDumps) {
+        for (auto shuffles = vmShuffle->Analyse(state); const auto &shuffle: shuffles->ToCMacros()) {
+            std::println("{}", shuffle);
+        }
+    }
+
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [2/2] Processed VMShuffles.");
+
+
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [2/2] Processing VMValues...");
+
+    for (const auto &vmValue: VMValueDumps) {
+        auto analysisResult = vmValue->Analyse(state);
+        RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                        std::format("- Found {} VMValue type: {}", analysisResult->vmValueIdentifier,
+                            analysisResult->EncryptionTypeToString()));
+    }
+
+    RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
+                    "Step [2/2] Processing VMValues.");
 
     return 0;
 

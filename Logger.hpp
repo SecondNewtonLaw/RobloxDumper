@@ -71,6 +71,7 @@ namespace RobloxDumper {
     DefineSectionName(MainThread, "RobloxDumper::MainThread");
     DefineSectionName(Anonymous, "RobloxDumper::Anonymous");
     DefineSectionName(SigMatcher, "RobloxDumper::SignatureMatcher");
+    DefineSectionName(StrMatcher, "RobloxDumper::StringMatcher");
 
     DefineSectionName(Analysis_XrefSearcher, "RobloxDumper::Analysis::XrefSearcher");
     DefineSectionName(Analysis_RTTI, "RobloxDumper::Analysis::RTTI");

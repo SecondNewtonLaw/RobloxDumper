@@ -73,6 +73,12 @@ add_executable(${PROJECT_NAME}
 
         AnalysisTasks/VMShuffles/VmShuffle7And8.cpp
         AnalysisTasks/VMShuffles/VmShuffle7And8.hpp
+        StringMatcher.cpp
+        StringMatcher.hpp
+        AnalysisTasks/VMShuffles/VmShuffle6.cpp
+        AnalysisTasks/VMShuffles/VmShuffle6.hpp
+        AnalysisTasks/VMValues/GlobalState.cpp
+        AnalysisTasks/VMValues/GlobalState.hpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

@@ -8,6 +8,7 @@
 #include <optional>
 
 #include <libhat/Process.hpp>
+#include <libhat/Signature.hpp>
 
 namespace RobloxDumper::Analysis {
     class StringSearcher {
@@ -15,6 +16,8 @@ namespace RobloxDumper::Analysis {
 
     public:
         static std::shared_ptr<StringSearcher> GetSingleton();
+
+        hat::signature ToAOB(std::string_view szTargetString);
 
         std::optional<void *> GetStringAddressInTarget(hat::process::module hModule, std::string_view szTargetString);
 

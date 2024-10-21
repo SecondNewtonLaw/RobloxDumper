@@ -10,7 +10,7 @@
 
 
 namespace RobloxDumper {
-    std::shared_ptr<RobloxDumper::SignatureMatcher> SignatureMatcher::pInstance;
+    std::shared_ptr<RobloxDumper::SignatureMatcher> RobloxDumper::SignatureMatcher::pInstance;
 
     std::shared_ptr<RobloxDumper::SignatureMatcher> SignatureMatcher::GetSingleton() {
         if (nullptr == RobloxDumper::SignatureMatcher::pInstance)
@@ -44,7 +44,7 @@ namespace RobloxDumper {
             RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::SigMatcher,
                             std::format("Matching signature pack {}...", packName));
 
-            auto scanResults = Utilities::ScanMany(hModule, signaturePack, true);
+            auto scanResults = Utilities::ScanMany(hModule, signaturePack, true, ".text");
 
             for (auto it = scanResults.begin(); it != scanResults.end(); ++it) {
                 if (!it->second.has_result()) {
@@ -53,9 +53,9 @@ namespace RobloxDumper {
                     continue;
                 }
                 RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::SigMatcher,
-                        std::format("- Found signature {} in {}+{}", it->first, moduleName, reinterpret_cast<
-                                        void *>(reinterpret_cast<std::uintptr_t>(it->second.get()) - hModule.
-                                                address())));
+                                std::format("- Found signature {} in {}+{}", it->first, moduleName, reinterpret_cast<
+                                    void *>(reinterpret_cast<std::uintptr_t>(it->second.get()) - hModule.
+                                        address())));
                 results[it->first] = it->second.get();
             }
         }
