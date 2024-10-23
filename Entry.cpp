@@ -148,7 +148,7 @@ int main(const int argc, const char **argv, const char **envp) {
                                             {
                                                 "luaC_checkgc",
                                                 hat::parse_signature(
-                                                    "4D 33 17 48 8B D9 49 8B 42 ? 49 39 42 ? 72 07 B2 ? E8 ? ? ? ?").
+                                                    "48 39 41 50 ? 0A B2 ? 48 8B CE E8 ? ? ? ?").
                                                 value()
                                             }
                                         });
