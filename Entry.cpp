@@ -370,6 +370,61 @@ int main(const int argc, const char **argv, const char **envp) {
     }
 
 
+    while (true) {
+        if (state.FunctionMap.contains("RBX::TaskSchedulerMK2::GetSingleton (Inlined, Fragment)")) {
+            auto target = state.FunctionMap.at("RBX::TaskSchedulerMK2::GetSingleton (Inlined, Fragment)");
+            std::println("Attempting to resolve for RBX::TaskScheduler::pInstance");
+            std::optional<std::unique_ptr<RobloxDumper::Analysis::DisassembledChunk> > disassembly = rbxStuDisassembler
+                    ->
+                    GetInstructions(static_cast<void *>(target),
+                                    rbxStuDisassembler->GetFunctionEnd(
+                                        static_cast<void *>(target)),
+                                    true);
+
+            if (!disassembly.has_value()) {
+                std::println("Cannot resolve for RBX::TaskScheduler::pInstance!");
+                continue;
+            }
+            const auto chunk = std::move(disassembly.value());
+            const auto movePointer = chunk->GetInstructionWhichMatches("mov", "qword ptr [rip + ", true);
+            if (!movePointer.has_value()) {
+                std::println(
+                    "Cannot resolve RBX::TaskScheduler::pInstance! Cannot find required instruction to calculate offset.");
+                continue;
+            }
+
+            const auto insn = movePointer.value();
+
+            if (insn.detail->x86.operands[0].type != x86_op_type::X86_OP_MEM) {
+                std::println(
+                    "Cannot resolve RBX::TaskScheduler::pInstance! Cannot find required instruction to calculate offset.");
+                continue;
+            }
+            if (insn.detail->x86.operands[1].type != x86_op_type::X86_OP_REG) {
+                std::println(
+                    "Cannot resolve RBX::TaskScheduler::pInstance! Cannot find required instruction to calculate offset.");
+                continue;
+            }
+
+            if (insn.detail->x86.operands[0].mem.base != X86_REG_RIP) {
+                std::println(
+                    "Cannot resolve RBX::TaskScheduler::pInstance! Cannot find required instruction to calculate offset.");
+                continue;
+            }
+
+            const auto disposition = insn.detail->x86.operands[0].mem.disp;
+
+            const auto offset = (disposition + insn.address + insn.size);
+
+
+            std::println("Found RBX::TaskScheduler::pInstance @ RobloxPlayerBeta.exe+{}",
+                         reinterpret_cast<void *>(offset - hRobloxModule.
+                                                  address()));
+        }
+
+        break;
+    }
+
     RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
                     "Step [2/2] Analysis...");
 
