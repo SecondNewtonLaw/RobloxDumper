@@ -148,7 +148,7 @@ int main(const int argc, const char **argv, const char **envp) {
                                             {
                                                 "luaC_checkgc",
                                                 hat::parse_signature(
-                                                    "48 39 41 50 ? 0A B2 ? 48 8B CE E8 ? ? ? ?").
+                                                    "48 8B 41 ? 48 39 41 ? ? ? 41 0F B6 D4 48 8B CE E8 ? ? ? ?").
                                                 value()
                                             }
                                         });
@@ -157,7 +157,7 @@ int main(const int argc, const char **argv, const char **envp) {
                                             {
                                                 "lua_type",
                                                 hat::parse_signature(
-                                                    "83 FA FF 75 08 48 8D 05 ? ? ? ? C3 48 63 C2 48 8D 0D ? ? ? ? 48 8B 04 C1 C3")
+                                                    "48 8D 35 ? ? ? ? 48 8B 34 CE")
                                                 .value()
                                             },
                                             {

@@ -22,7 +22,7 @@ namespace RobloxDumper::AnalysisTasks::VmShuffles {
 
         const auto instructions = std::move(possibleInstructions.value());
 
-        const auto loadTableAddress = instructions->GetInstructionWhichMatches("lea", "rcx, [rip +", true);
+        const auto loadTableAddress = instructions->GetInstructionWhichMatches("lea", "rsi, [rip +", true);
 
         if (!loadTableAddress.has_value())
             return std::make_shared<VMShuffleResult>(false, std::map<std::string, std::vector<MapInfo> >{});

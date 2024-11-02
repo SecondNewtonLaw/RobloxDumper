@@ -14,7 +14,7 @@ namespace RobloxDumper::AnalysisTasks::VmShuffles {
         auto possibleInstructions = robloxDumperDisassembler->GetInstructions(lpluaGArithError,
                                                                               reinterpret_cast<void *>(
                                                                                   reinterpret_cast<std::uintptr_t>(
-                                                                                      lpluaGArithError) + 0x4C),
+                                                                                      lpluaGArithError) + 0x6C),
                                                                               true);
 
         if (!possibleInstructions.has_value())
