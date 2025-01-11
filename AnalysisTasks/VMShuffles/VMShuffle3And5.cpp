@@ -14,7 +14,7 @@ namespace RobloxDumper::AnalysisTasks::VmShuffles {
         auto possibleInstructions = robloxDumperDisassembler->GetInstructions(lpLuaType,
                                                                               reinterpret_cast<void *>(
                                                                                   reinterpret_cast<std::uintptr_t>(
-                                                                                      lpLuaType) + 0x1D),
+                                                                                      lpLuaType) + 0x10),
                                                                               true);
 
         if (!possibleInstructions.has_value())

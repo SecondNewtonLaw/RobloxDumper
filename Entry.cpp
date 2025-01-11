@@ -84,8 +84,10 @@ int main(const int argc, const char **argv, const char **envp) {
     }
 
     RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread,
-                    std::format("Loading {} into memory...", filename));
-    LoadLibraryA(filename.c_str());
+                    std::format(
+                        "Loading {} into memory utilising LoadLibraryExA(..., nullptr, DONT_RESOLVE_DLL_REFERENCES)...",
+                        filename));
+    LoadLibraryExA(filename.c_str(), nullptr, DONT_RESOLVE_DLL_REFERENCES);
     RobloxDumperLog(RobloxDumper::LogType::Information, RobloxDumper::MainThread, "Bootstrapping analysis tools...");
 
     auto stringMatcher = RobloxDumper::StringMatcher::GetSingleton();
@@ -157,7 +159,7 @@ int main(const int argc, const char **argv, const char **envp) {
                                             {
                                                 "lua_type",
                                                 hat::parse_signature(
-                                                    "48 8D 35 ? ? ? ? 48 8B 34 CE")
+                                                    "0F 84 4E FF FF FF 48 8D 35 ? ? ? ? 48 8B 34 CE")
                                                 .value()
                                             },
                                             {
@@ -206,6 +208,10 @@ int main(const int argc, const char **argv, const char **envp) {
                                       {
                                           "luaV_settable",
                                           "\'__newindex\' chain too long; possible loop"
+                                      },
+                                      {
+                                          "dumptable",
+                                          R"({"type":"table","cat":%d,"size":%d)"
                                       }
                                   });
 
@@ -213,6 +219,11 @@ int main(const int argc, const char **argv, const char **envp) {
                                       {
                                           "RBX::ScriptContext::runScript",
                                           "[FLog::ScriptContext] Running script %p"
+                                      },
+                                      {
+                                          "RBX::World::reportTouchInfo",
+                                          "new overlap in different world"
+                                          // Contains some RBX::World and RBX::Primitive offsets.
                                       },
                                       {
                                           "RBX::ScriptContext::task_defer",
